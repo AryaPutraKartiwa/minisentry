@@ -1,0 +1,56 @@
+# Secrets come from .env (copy .env.example and fill it in). Compose refuses to start if one is missing.
+# Only the API is published. Postgres and Redis are reachable only on the internal compose network.
+x-app-env: &app-env
+  DATABASE_URL: postgresql+psycopg://minisentry:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/minisentry
+  REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}@redis:6379/0
+  PROJECT_KEYS: ${PROJECT_KEYS:?set PROJECT_KEYS in .env}
+
+services:
+  api:
+    build: .
+    ports: ["${API_BIND:-0.0.0.0}:${API_PORT:-8000}:8000"]
+    environment: *app-env
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  worker:
+    build: .
+    command: ["python", "-m", "minisentry_server.worker"]
+    environment: *app-env
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    # docker compose up --scale worker=3  -> workers share the stream via a consumer group
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: minisentry
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: minisentry
+    volumes: [pgdata:/var/lib/postgresql/data]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U minisentry"]
+      interval: 2s
+      retries: 15
+
+  redis:
+    image: redis:7-alpine
+    command: ["sh", "-c", 'exec redis-server --requirepass "$$REDIS_PASSWORD"']
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
+      REDISCLI_AUTH: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
+    volumes: [redisdata:/data]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      retries: 15
+
+volumes:
+  pgdata:
+  redisdata:

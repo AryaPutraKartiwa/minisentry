@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>minisentry</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --surface-2: #f3f2ef;
+  --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10);
+  --series: #2a78d6; --series-hover: #1c5cab; --series-soft: #cde2fb;
+  --critical: #d03b3b; --warning: #fab219; --good: #0ca30c; --info: #2a78d6;
+  --code-hl: #fff4d6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232321;
+    --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+    --series: #3987e5; --series-hover: #6da7ec; --series-soft: #104281;
+    --info: #3987e5; --code-hl: #3a3220;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232321;
+  --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+  --series: #3987e5; --series-hover: #6da7ec; --series-soft: #104281;
+  --info: #3987e5; --code-hl: #3a3220;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--page); color: var(--ink);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+button, input { font: inherit; color: inherit; }
+.wrap { max-width: 1200px; margin: 0 auto; padding: 20px 16px 48px; }
+header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+header h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
+header .proj { color: var(--ink-2); }
+.spacer { flex: 1; }
+.live { display: flex; align-items: center; gap: 8px; color: var(--ink-2); font-size: 13px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--good); }
+.live.paused .dot { background: var(--muted); }
+.live.error .dot { background: var(--critical); }
+.btn {
+  border: 1px solid var(--border); background: var(--surface); border-radius: 8px;
+  padding: 6px 12px; cursor: pointer;
+}
+.btn:hover { background: var(--surface-2); }
+.card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px;
+}
+.card h2 { font-size: 14px; font-weight: 600; margin: 0 0 2px; }
+.card .sub { color: var(--muted); font-size: 12px; margin: 0 0 12px; }
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
+.kpi .label { color: var(--ink-2); font-size: 13px; }
+.kpi .value { font-size: 28px; font-weight: 600; letter-spacing: -0.02em; margin-top: 2px; }
+.kpi .note { color: var(--muted); font-size: 12px; }
+.charts { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 12px; margin-bottom: 12px; }
+.chart-box { position: relative; }
+svg { display: block; width: 100%; overflow: visible; }
+.tick { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.tooltip {
+  position: absolute; pointer-events: none; background: var(--ink); color: var(--surface);
+  padding: 6px 8px; border-radius: 6px; font-size: 12px; white-space: nowrap; display: none;
+  transform: translate(-50%, calc(-100% - 8px)); z-index: 5;
+}
+.tooltip b { font-weight: 600; }
+.bars { display: grid; gap: 10px; }
+.bar-row { cursor: pointer; border-radius: 6px; padding: 2px 4px; margin: 0 -4px; }
+.bar-row:hover { background: var(--surface-2); }
+.bar-row .name { font-size: 12px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar-line { display: flex; align-items: center; gap: 8px; }
+.bar-track { flex: 1; height: 10px; }
+.bar-fill { height: 10px; background: var(--series); border-radius: 0 4px 4px 0; min-width: 2px; }
+.bar-row:hover .bar-fill { background: var(--series-hover); }
+.bar-val { font-size: 12px; color: var(--ink); font-variant-numeric: tabular-nums; min-width: 3ch; text-align: right; }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font-weight: 500; color: var(--muted); font-size: 12px; padding: 8px; border-bottom: 1px solid var(--grid); }
+td { padding: 10px 8px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+tbody tr { cursor: pointer; }
+tbody tr:hover { background: var(--surface-2); }
+tbody tr:last-child td { border-bottom: 0; }
+.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.title-cell .t { font-weight: 500; word-break: break-word; }
+.title-cell .c { color: var(--muted); font-size: 12px; font-family: ui-monospace, monospace; }
+.when { color: var(--ink-2); white-space: nowrap; }
+.level { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+.level svg { width: 14px; height: 14px; flex: none; }
+.empty { color: var(--muted); padding: 24px 8px; text-align: center; }
+
+/* detail drawer */
+.scrim { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: none; z-index: 10; }
+.drawer {
+  position: fixed; top: 0; right: 0; bottom: 0; width: min(720px, 100%); background: var(--page);
+  border-left: 1px solid var(--border); overflow-y: auto; transform: translateX(100%);
+  transition: transform .2s ease; z-index: 11; padding: 20px 16px 48px;
+}
+.drawer.open { transform: none; }
+.drawer.open + .scrim, .scrim.show { display: block; }
+.drawer h3 { margin: 4px 0; font-size: 18px; word-break: break-word; }
+.drawer .meta { color: var(--ink-2); font-size: 13px; display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+.section { margin-bottom: 12px; }
+.frame { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; overflow: hidden; background: var(--surface); }
+.frame summary { padding: 8px 12px; cursor: pointer; font-family: ui-monospace, monospace; font-size: 12px; }
+.frame summary .fn { font-weight: 600; }
+.frame.lib summary { color: var(--muted); }
+.frame pre { margin: 0; padding: 8px 0; font-size: 12px; overflow-x: auto; border-top: 1px solid var(--grid); }
+.frame pre div { padding: 0 12px; white-space: pre; }
+.frame pre .hl { background: var(--code-hl); }
+.frame pre .ln { display: inline-block; width: 4ch; color: var(--muted); text-align: right; margin-right: 12px; }
+.tag-pill { display: inline-block; border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; font-size: 12px; margin: 0 4px 4px 0; background: var(--surface); }
+.crumbs { list-style: none; margin: 0; padding: 0; }
+.crumbs li { display: grid; grid-template-columns: 90px 1fr; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--grid); font-size: 13px; }
+.crumbs li:last-child { border-bottom: 0; }
+.crumbs .cat { color: var(--muted); font-size: 12px; font-family: ui-monospace, monospace; overflow: hidden; text-overflow: ellipsis; }
+pre.json { margin: 0; font-size: 12px; white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, monospace; }
+
+/* key dialog */
+dialog { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--ink); padding: 20px; width: min(420px, calc(100% - 32px)); }
+dialog::backdrop { background: rgba(0,0,0,0.45); }
+dialog label { display: block; font-size: 13px; color: var(--ink-2); margin: 12px 0 4px; }
+dialog input { width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--page); }
+dialog .err { color: var(--critical); font-size: 13px; min-height: 1.4em; margin-top: 8px; }
+
+@media (max-width: 860px) {
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .charts { grid-template-columns: minmax(0, 1fr); }
+  .hide-sm { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>minisentry</h1>
+    <span class="proj" id="projLabel"></span>
+    <span class="spacer"></span>
+    <span class="live" id="live"><span class="dot"></span><span id="liveText">connecting…</span></span>
+    <button class="btn" id="pauseBtn" type="button">Pause</button>
+    <button class="btn" id="keyBtn" type="button">Change key</button>
+  </header>
+
+  <section class="kpis">
+    <div class="card kpi"><div class="label">Issues</div><div class="value" id="kIssues">–</div><div class="note">unique bugs after grouping</div></div>
+    <div class="card kpi"><div class="label">Events stored</div><div class="value" id="kEvents">–</div><div class="note" id="kRatio">&nbsp;</div></div>
+    <div class="card kpi"><div class="label">Events, last 60 min</div><div class="value" id="kHour">–</div><div class="note" id="kPeak">&nbsp;</div></div>
+    <div class="card kpi"><div class="label">Most frequent issue</div><div class="value" id="kTop">–</div><div class="note" id="kTopName">&nbsp;</div></div>
+  </section>
+
+  <section class="charts">
+    <div class="card">
+      <h2>Events per minute</h2>
+      <p class="sub">Last 60 minutes, by time received</p>
+      <div class="chart-box" id="timeBox">
+        <svg id="timeChart" height="260" role="img" aria-label="Events per minute over the last hour"></svg>
+        <div class="tooltip" id="timeTip"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Top issues</h2>
+      <p class="sub">By total events</p>
+      <div class="bars" id="topBars"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>All issues</h2>
+    <p class="sub">Most recently seen first · click a row for details</p>
+    <table>
+      <thead><tr><th>Level</th><th>Issue</th><th class="num">Events</th><th class="hide-sm">First seen</th><th>Last seen</th></tr></thead>
+      <tbody id="issueRows"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+    </table>
+  </section>
+</div>
+
+<aside class="drawer" id="drawer" aria-label="Issue details"></aside>
+<div class="scrim" id="scrim"></div>
+
+<dialog id="keyDialog">
+  <form id="keyForm" method="dialog">
+    <h2 style="margin:0;font-size:16px">Connect to a project</h2>
+    <label for="projInput">Project ID</label>
+    <input id="projInput" type="number" min="1" value="1" required>
+    <label for="keyInput">Project key (from PROJECT_KEYS in .env)</label>
+    <input id="keyInput" type="password" autocomplete="off" required>
+    <div class="err" id="keyErr"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px">
+      <button class="btn" type="submit">Connect</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmt = (n) => Number(n).toLocaleString();
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+};
+
+// A link like /dashboard#project=1&key=... connects straight away (the hash never reaches the server).
+const hash = new URLSearchParams(location.hash.slice(1));
+if (hash.get("key")) {
+  store.set("ms.key", hash.get("key"));
+  store.set("ms.project", hash.get("project") || "1");
+  history.replaceState(null, "", location.pathname);
+}
+let project = store.get("ms.project") || "1";
+let key = store.get("ms.key") || "";
+let paused = false, lastOk = 0, timer = null, issues = [], openIssueId = null;
+
+async function api(path) {
+  const res = await fetch(`/api/${project}${path}`, { headers: { "X-Minisentry-Key": key } });
+  if (res.status === 401) { const e = new Error("unauthorized"); e.auth = true; throw e; }
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+function ago(iso) {
+  const s = Math.max(0, (Date.now() - new Date(iso)) / 1000);
+  if (s < 60) return `${Math.floor(s)}s ago`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+}
+const hhmm = (iso) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+// Level = status: always an icon + a text label, never color alone.
+const LEVEL_ICON = {
+  fatal: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="var(--critical)"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>',
+  error: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="var(--critical)"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>',
+  warning: '<svg viewBox="0 0 16 16"><path d="M8 1.5l7 12.5H1z" fill="var(--warning)"/><path d="M8 6v4" stroke="#0b0b0b" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="12" r="0.9" fill="#0b0b0b"/></svg>',
+  info: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="var(--info)"/><path d="M8 7v4.5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="4.8" r="0.9" fill="#fff"/></svg>',
+};
+const levelBadge = (lvl) => `<span class="level">${LEVEL_ICON[lvl] || LEVEL_ICON.info}${esc(lvl)}</span>`;
+
+// ---- events per minute: column chart ---------------------------------------
+function niceMax(v) {
+  if (v <= 4) return 4;
+  const p = 10 ** Math.floor(Math.log10(v)), n = v / p;
+  return (n <= 2 ? 2 : n <= 5 ? 5 : 10) * p;
+}
+function drawTimeChart(points) {
+  const svg = $("timeChart"), W = svg.clientWidth || 600, H = 260;
+  const m = { l: 32, r: 4, t: 8, b: 22 }, iw = W - m.l - m.r, ih = H - m.t - m.b;
+  const max = niceMax(Math.max(...points.map((p) => p.count), 0));
+  const y = (v) => m.t + ih - (v / max) * ih;
+  const slot = iw / points.length, gap = 2, bw = Math.max(1, slot - gap);
+  let out = "";
+  for (let i = 0; i <= 4; i++) {
+    const v = (max / 4) * i, yy = y(v);
+    out += `<line x1="${m.l}" x2="${W - m.r}" y1="${yy}" y2="${yy}" stroke="${i ? "var(--grid)" : "var(--axis)"}" />`;
+    out += `<text class="tick" x="${m.l - 6}" y="${yy + 4}" text-anchor="end">${fmt(v)}</text>`;
+  }
+  points.forEach((p, i) => {
+    const x = m.l + i * slot + gap / 2;
+    if (p.count > 0) {
+      const top = y(p.count), h = m.t + ih - top, r = Math.min(4, bw / 2, h);
+      out += `<path data-i="${i}" class="col" fill="var(--series)" d="M${x},${m.t + ih} V${top + r} Q${x},${top} ${x + r},${top} H${x + bw - r} Q${x + bw},${top} ${x + bw},${top + r} V${m.t + ih} Z"/>`;
+    }
+    if (i % 15 === 0 || i === points.length - 1) {
+      const label = i === points.length - 1 ? "now" : hhmm(p.minute);
+      out += `<text class="tick" x="${x + bw / 2}" y="${H - 6}" text-anchor="${i === points.length - 1 ? "end" : "middle"}">${label}</text>`;
+    }
+    out += `<rect data-i="${i}" class="hit" x="${m.l + i * slot}" y="${m.t}" width="${slot}" height="${ih}" fill="transparent"/>`;
+  });
+  svg.innerHTML = out;
+  const tip = $("timeTip");
+  svg.onmousemove = (e) => {
+    const i = e.target.dataset?.i; if (i === undefined) { tip.style.display = "none"; return; }
+    const p = points[i];
+    svg.querySelectorAll(".col").forEach((c) => c.setAttribute("fill", c.dataset.i === i ? "var(--series-hover)" : "var(--series)"));
+    tip.innerHTML = `<b>${fmt(p.count)}</b> event${p.count === 1 ? "" : "s"} · ${hhmm(p.minute)}`;
+    tip.style.left = `${m.l + (+i + 0.5) * slot}px`;
+    tip.style.top = `${p.count ? y(p.count) : m.t + ih}px`;
+    tip.style.display = "block";
+  };
+  svg.onmouseleave = () => { tip.style.display = "none"; svg.querySelectorAll(".col").forEach((c) => c.setAttribute("fill", "var(--series)")); };
+}
+
+// ---- top issues: horizontal bars --------------------------------------------
+function drawTopBars(list) {
+  const top = [...list].sort((a, b) => b.times_seen - a.times_seen).slice(0, 6);
+  const max = Math.max(1, ...top.map((i) => i.times_seen));
+  $("topBars").innerHTML = top.length ? top.map((i) => `
+    <div class="bar-row" data-id="${i.id}" title="${esc(i.title)}">
+      <div class="name">${esc(i.title)}</div>
+      <div class="bar-line">
+        <div class="bar-track"><div class="bar-fill" style="width:${(i.times_seen / max) * 100}%"></div></div>
+        <span class="bar-val">${fmt(i.times_seen)}</span>
+      </div>
+    </div>`).join("") : '<div class="empty">No issues yet</div>';
+}
+
+function drawTable(list) {
+  $("issueRows").innerHTML = list.length ? list.map((i) => `
+    <tr data-id="${i.id}">
+      <td>${levelBadge(i.level)}</td>
+      <td class="title-cell"><div class="t">${esc(i.title)}</div><div class="c">${esc(i.culprit || "")}</div></td>
+      <td class="num">${fmt(i.times_seen)}</td>
+      <td class="when hide-sm" title="${esc(i.first_seen)}">${ago(i.first_seen)}</td>
+      <td class="when" title="${esc(i.last_seen)}">${ago(i.last_seen)}</td>
+    </tr>`).join("") : '<tr><td colspan="5" class="empty">No issues yet. Send some errors: <code>./demo.sh</code></td></tr>';
+}
+
+async function refresh() {
+  try {
+    const [list, stats] = await Promise.all([api("/issues?limit=200"), api("/stats?minutes=60")]);
+    issues = list;
+    const hour = stats.per_minute.reduce((s, p) => s + p.count, 0);
+    const peak = stats.per_minute.reduce((a, p) => (p.count > a.count ? p : a), { count: 0 });
+    const top = [...list].sort((a, b) => b.times_seen - a.times_seen)[0];
+    $("kIssues").textContent = fmt(list.length);
+    $("kEvents").textContent = fmt(stats.total_events);
+    $("kRatio").textContent = list.length ? `${(stats.total_events / list.length).toFixed(1)} events per issue` : " ";
+    $("kHour").textContent = fmt(hour);
+    $("kPeak").textContent = peak.count ? `peak ${fmt(peak.count)}/min at ${hhmm(peak.minute)}` : "quiet";
+    $("kTop").textContent = top ? fmt(top.times_seen) : "–";
+    $("kTopName").textContent = top ? top.title : " ";
+    drawTimeChart(stats.per_minute);
+    drawTopBars(list);
+    drawTable(list);
+    lastOk = Date.now();
+    setLive();
+  } catch (err) {
+    if (err.auth) { askKey("That key was rejected for this project."); return; }
+    $("live").className = "live error";
+    $("liveText").textContent = "can't reach the API";
+  }
+}
+
+function setLive() {
+  const el = $("live");
+  el.className = paused ? "live paused" : "live";
+  $("liveText").textContent = paused ? "paused" : lastOk ? `live · updated ${Math.round((Date.now() - lastOk) / 1000)}s ago` : "connecting…";
+}
+
+function start() {
+  $("projLabel").textContent = `project ${project}`;
+  clearInterval(timer);
+  refresh();
+  timer = setInterval(() => { if (!paused) refresh(); else setLive(); }, 5000);
+}
+
+// ---- issue detail drawer ------------------------------------------------------
+function frameHtml(f, open) {
+  const lines = [];
+  const first = (f.lineno || 0) - (f.pre_context || []).length;
+  (f.pre_context || []).forEach((l, k) => lines.push([first + k, l, false]));
+  if (f.context_line != null) lines.push([f.lineno, f.context_line, true]);
+  (f.post_context || []).forEach((l, k) => lines.push([f.lineno + 1 + k, l, false]));
+  const code = lines.length ? `<pre>${lines.map(([n, l, hl]) => `<div class="${hl ? "hl" : ""}"><span class="ln">${n || ""}</span>${esc(l)}</div>`).join("")}</pre>` : "";
+  return `<details class="frame ${f.in_app ? "" : "lib"}" ${open ? "open" : ""}>
+    <summary><span class="fn">${esc(f.function || "?")}</span> in ${esc(f.filename || f.module || "?")}${f.lineno ? ` line ${f.lineno}` : ""}${f.in_app ? "" : " · library"}</summary>${code}</details>`;
+}
+
+async function openIssue(id) {
+  openIssueId = id;
+  const issue = issues.find((i) => String(i.id) === String(id));
+  const d = $("drawer");
+  d.innerHTML = `<button class="btn" id="closeDrawer" type="button">Close</button><p class="empty">Loading…</p>`;
+  d.classList.add("open"); $("scrim").classList.add("show");
+  $("closeDrawer").onclick = closeIssue;
+  let events;
+  try { events = await api(`/issues/${id}/events?limit=20`); } catch { d.querySelector(".empty").textContent = "Could not load events."; return; }
+  if (openIssueId !== id) return;
+  const ev = events[0]?.payload || {};
+  const exc = ev.exception?.values || [];
+  const last = exc[exc.length - 1];
+  const frames = (last?.stacktrace?.frames || []).slice().reverse(); // innermost first
+  const firstApp = frames.findIndex((f) => f.in_app);
+  const crumbs = ev.breadcrumbs || [];
+  const tags = ev.tags || {};
+  const sections = [];
+  if (exc.length) {
+    sections.push(`<div class="card section"><h2>Stack trace</h2><p class="sub">${esc(last.type)}: ${esc(last.value)} · innermost call first</p>
+      ${exc.length > 1 ? `<p class="sub">Caused by: ${exc.slice(0, -1).map((e) => `${esc(e.type)}: ${esc(e.value)}`).join(" → ")}</p>` : ""}
+      ${frames.map((f, k) => frameHtml(f, k === firstApp)).join("")}</div>`);
+  } else if (ev.message) {
+    sections.push(`<div class="card section"><h2>Message</h2><pre class="json">${esc(ev.message)}</pre></div>`);
+  }
+  if (ev.request) sections.push(`<div class="card section"><h2>Request</h2><pre class="json">${esc(JSON.stringify(ev.request, null, 2))}</pre></div>`);
+  if (crumbs.length) sections.push(`<div class="card section"><h2>Breadcrumbs</h2><p class="sub">What happened before the error, oldest first</p>
+    <ul class="crumbs">${crumbs.map((c) => `<li><span class="cat">${esc(c.category || c.type || "")}</span><span>${esc(c.message || JSON.stringify(c.data || {}))}</span></li>`).join("")}</ul></div>`);
+  if (Object.keys(tags).length || ev.release || ev.environment) sections.push(`<div class="card section"><h2>Tags</h2>
+    ${ev.release ? `<span class="tag-pill">release: ${esc(ev.release)}</span>` : ""}${ev.environment ? `<span class="tag-pill">environment: ${esc(ev.environment)}</span>` : ""}
+    ${Object.entries(tags).map(([k, v]) => `<span class="tag-pill">${esc(k)}: ${esc(v)}</span>`).join("")}</div>`);
+  if (ev.extra && Object.keys(ev.extra).length) sections.push(`<div class="card section"><h2>Extra data</h2><p class="sub">Secrets are scrubbed in the app before sending</p><pre class="json">${esc(JSON.stringify(ev.extra, null, 2))}</pre></div>`);
+  if (events.length > 1) sections.push(`<div class="card section"><h2>Recent events</h2><p class="sub">Latest ${events.length} of ${fmt(issue?.times_seen ?? events.length)}</p>
+    <ul class="crumbs">${events.map((e) => `<li><span class="cat">${esc(hhmm(e.timestamp))}</span><span>${esc(e.payload?.exception?.values?.slice(-1)[0]?.value ?? e.payload?.message ?? "")}</span></li>`).join("")}</ul></div>`);
+
+  d.innerHTML = `<button class="btn" id="closeDrawer" type="button">Close</button>
+    <div style="margin-top:16px">${levelBadge(issue?.level || ev.level || "error")}</div>
+    <h3>${esc(issue?.title || "")}</h3>
+    <div class="meta"><span>${esc(issue?.culprit || "")}</span><span><b>${fmt(issue?.times_seen ?? 0)}</b> events</span>
+      <span>first seen ${issue ? ago(issue.first_seen) : ""}</span><span>last seen ${issue ? ago(issue.last_seen) : ""}</span></div>
+    ${sections.join("") || '<p class="empty">No event details stored.</p>'}`;
+  $("closeDrawer").onclick = closeIssue;
+}
+function closeIssue() { openIssueId = null; $("drawer").classList.remove("open"); $("scrim").classList.remove("show"); }
+
+// ---- wiring ------------------------------------------------------------------
+function askKey(msg) {
+  paused = true;
+  $("keyErr").textContent = msg || "";
+  $("projInput").value = project;
+  $("keyInput").value = "";
+  if (!$("keyDialog").open) $("keyDialog").showModal();
+}
+$("keyForm").addEventListener("submit", () => {
+  project = String(parseInt($("projInput").value, 10) || 1);
+  key = $("keyInput").value.trim();
+  store.set("ms.project", project); store.set("ms.key", key);
+  paused = false; $("pauseBtn").textContent = "Pause";
+  start();
+});
+$("keyBtn").onclick = () => askKey();
+$("pauseBtn").onclick = () => { paused = !paused; $("pauseBtn").textContent = paused ? "Resume" : "Pause"; if (!paused) refresh(); setLive(); };
+$("scrim").onclick = closeIssue;
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeIssue(); });
+document.addEventListener("click", (e) => {
+  const row = e.target.closest("[data-id]");
+  if (row && (row.closest("#issueRows") || row.closest("#topBars"))) openIssue(row.dataset.id);
+});
+let resizeT; window.addEventListener("resize", () => { clearTimeout(resizeT); resizeT = setTimeout(refresh, 150); });
+
+if (key) start(); else askKey();
+</script>
+</body>
+</html>

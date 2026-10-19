@@ -1,0 +1,63 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "minisentry"
+version = "0.1.0"
+description = "A tiny error-tracking SDK and ingest pipeline, built to learn how Sentry works under the hood."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Arya" }]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Software Development :: Debuggers",
+]
+# The SDK itself has zero runtime dependencies on purpose (see docs/design-decisions.md).
+dependencies = []
+
+[project.optional-dependencies]
+server = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "pydantic>=2.6",
+    "sqlalchemy>=2.0",
+    "redis>=5.0",
+    "psycopg[binary]>=3.1",
+]
+dev = [
+    "pytest>=8.0",
+    "httpx>=0.27",
+    "ruff==0.8.4",  # pinned: new ruff releases add rules/format changes that would break CI
+    "mypy>=1.10",
+]
+bench = ["locust>=2.24"]
+
+[project.scripts]
+minisentry-worker = "minisentry_server.worker:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/minisentry", "src/minisentry_server"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = ["integration: needs real Redis/Postgres (set MINISENTRY_TEST_REDIS_URL / MINISENTRY_TEST_DATABASE_URL)"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+files = ["src/minisentry", "src/minisentry_server"]
+
+[[tool.mypy.overrides]]
+module = ["redis", "redis.*"]
+ignore_missing_imports = true
